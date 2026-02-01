@@ -1,6 +1,6 @@
-# hcan
+# HCAN
 
-`hcan` is a small PyTorch implementation of **HCAN**: a hierarchical head for multi-step, multi-channel forecasting that combines:
+`HCAN` is a small, plug and play PyTorch implementation of **HCAN**: a hierarchical head for multi-step, multi-channel forecasting that combines:
 
 - **Direct regression** (`y_hat`) for the forecast values.
 - **Hierarchical classification + regression** at two resolutions:
@@ -8,6 +8,14 @@
   - *Fine* bins (more granular quantile ranges)
 - **Evidential (Dirichlet) uncertainty** via non-negative “evidence” outputs and an uncertainty-aware loss.
 
+This architecture is based on the paper:
+> **Hierarchical Classification and Regression for Multi-step Time Series Forecasting**  
+> original implementation: https://github.com/syrGitHub/HCAN  
+> original paper: https://arxiv.org/abs/2405.18975
+
+The purpose of my implementation is to provide more direct, PyTorch module that can be plugged into existing forecasting models.  
+
+## Features
 The repo also includes an example training script on a tiny sample dataset (S\&P 500 return + volatility) under `tests/`.
 
 ## What the model returns
@@ -48,7 +56,7 @@ x = torch.randn(B, T, C)
 model = HCAN(pred_len=T, channels=C)
 outputs = model(x)
 
-# y_trues should be a representative history of targets (any shape ending in C)
+# y_trues should be representative of the full history of targets (any shape ending in C)
 criterion = HCANLoss(y_trues=torch.randn(1000, T, C))
 loss = criterion(outputs, torch.randn(B, T, C))["L_TOTAL"]
 loss.backward()
@@ -74,7 +82,3 @@ Notes:
 - `hcan/__init__.py`: package exports
 - `tests/test.py`: runnable demo training loop
 - `tests/SPX_sample.parquet`: sample dataset
-
-## License
-
-No license file is included yet. If you plan to publish this, consider adding a `LICENSE` file.
