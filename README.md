@@ -13,7 +13,7 @@ This architecture is based on the paper:
 > original implementation: https://github.com/syrGitHub/HCAN  
 > original paper: https://arxiv.org/abs/2405.18975
 
-The purpose of my implementation is to provide more direct, PyTorch module that can be plugged into existing forecasting models.  
+The purpose of my implementation is to provide a more direct, PyTorch module that can be plugged into existing forecasting models.  
 
 ## Features
 The repo also includes an example training script on a tiny sample dataset (S\&P 500 return + volatility) under `tests/`.
