@@ -104,6 +104,12 @@ Notes:
 - The script reads `SPX_sample.parquet`. Run it from `tests/` or keep the working directory at the repo root (as above).
 - It uses CUDA if available.
 
+## Installation
+
+```
+pip install git+https://github.com/lllllllrrrrrrr/HCAN.git
+```
+
 ## Project layout
 
 - `hcan/hcan.py`: HCAN module + `HCANLoss`
