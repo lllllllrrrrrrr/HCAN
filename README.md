@@ -1,7 +1,11 @@
 # HCAN
 
-`HCAN` is a small, plug and play PyTorch implementation of **HCAN**: a hierarchical head for multi-step, multi-channel
-forecasting that combines:
+`HCAN` is a small, plug and play PyTorch implementation of **HCAN**: a 
+Hierarchical Classification Auxiliary Network, which consists of a tail layer
+matched with its own loss function (`HCANLoss`) that can be added on top of any existing forecasting model.
+
+The idea is to provide a more direct, modular implementation of the 
+hierarchical head for multi-step, multi-channel forecasting that combines:
 
 - **Direct regression** (`y_hat`) for the forecast values.
 - **Hierarchical classification + regression** at two resolutions:
