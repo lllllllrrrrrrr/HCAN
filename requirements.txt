@@ -1,0 +1,5 @@
+python==3.13.9
+pyarrow==21.0
+tqdm
+torch==2.9.1
+pandas==2.3.3
