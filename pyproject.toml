@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hcan"
+version = "0.1.0"
+description = "HCAN layer and loss for PyTorch"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { file = "LICENSE" }
+authors = [{ name = "lllllllrrrrrrr" }]
+dependencies = [
+    "torch",
+]
+
+[project.optional-dependencies]
+dev = [
+    "numpy",
+    "pytest",
+    "pandas",
+    "pyarrow",
+    "tqdm",
+]
+
+[tool.setuptools.packages.find]
+where = ["hcan"]
+include = ["hcan*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
