@@ -82,23 +82,6 @@ From the repo root, run:
 python .\tests\test.py
 ```
 
-## Test results
-
-HCAN vs no HCAN after 200 training epochs achieves comparable return MSE but
-far better sign accuracy, and lower MSE on volatility:
-
-```
-Training NoHCAN: 100%|██████████████████████████████| 200/200 [00:02<00:00, 80.23it/s, loss=8.91e-8]
-NoHCAN sign accuracy: 0.0
-NoHCAN returns MSE: 5.0933668e-05
-NoHCAN volatility MSE: 5.2984535e-05
-
-Training WithHCAN: 100%|████████████████████████████| 200/200 [00:05<00:00, 39.64it/s, loss=0.00362]
-WithHCAN sign accuracy: 0.6043566362715299
-WithHCAN returns MSE: 5.875215e-05
-WithHCAN volatility MSE: 1.6380407e-05
-```
-
 Notes:
 
 - The script reads `SPX_sample.parquet`. Run it from `tests/` or keep the working directory at the repo root (as above).
