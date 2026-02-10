@@ -47,8 +47,9 @@ class WithHCAN(nn.Module):
         super().__init__()
         self.lstm = nn.LSTM(input_size=2, hidden_size=64, num_layers=3, batch_first=True)
         self.proj = nn.Sequential(
-            nn.Linear(64, 2),
+            nn.Linear(64, 64),
             nn.ReLU(),
+            nn.Linear(64, 2),
         )
         self.hcan = HCAN(pred_len=LOOKAHEAD, channels=2)
         return
@@ -65,8 +66,9 @@ class NoHCAN(nn.Module):
         super().__init__()
         self.lstm = nn.LSTM(input_size=2, hidden_size=64, num_layers=3, batch_first=True)
         self.proj = nn.Sequential(
-            nn.Linear(64, 2),
+            nn.Linear(64, 64),
             nn.ReLU(),
+            nn.Linear(64, 2),
         )
         return
 
