@@ -94,8 +94,10 @@ def train_model(model, model_name: str):
     else:
         criterion = HCANLoss(
             y_trues=data.y_trues,
-            lambda_acl=1.5,
-            # reg_loss='mse',
+            lambda_direct=1,
+            lambda_acl=1,
+            lambda_cls=1,
+            lambda_reg=1,
         ).to(device=DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     bar = trange(200, desc='Training ' + model_name, ncols=100)
@@ -127,6 +129,10 @@ def train_model(model, model_name: str):
     print(model_name + ' sign accuracy:', np.mean(np.sign(y[..., 0]) == np.sign(x[..., 0])))
     print(model_name + ' returns MSE:', np.mean((y[..., 0] - x[..., 0]) ** 2))
     print(model_name + ' volatility MSE:', np.mean((y[..., 1] - x[..., 1]) ** 2))
+    print(model_name + ' Mean Pred/Actual Return:', np.mean(x[..., 0]) / np.mean(y[..., 0]))
+    print(model_name + ' Std Pred/Actual Return:', np.std(x[..., 0]) / np.std(y[..., 0]))
+    print(model_name + ' Mean Pred/Actual Vola:', np.mean(x[..., 1]) / np.mean(y[..., 1]))
+    print(model_name + ' Std Pred/Actual Vola:', np.std(x[..., 1]) / np.std(y[..., 1]))
     return
 
 
