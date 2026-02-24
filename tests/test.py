@@ -4,9 +4,14 @@ import torch
 import torch.nn as nn
 import pandas as pd
 from torch import Tensor
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from tqdm import trange
 
+torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(42)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 WINDOW_SIZE = 256
 LOOKAHEAD = 21
 DTYPE = torch.float32
@@ -51,7 +56,7 @@ class WithHCAN(nn.Module):
             nn.ReLU(),
             nn.Linear(64, 2),
         )
-        self.hcan = HCAN(pred_len=LOOKAHEAD, channels=2)
+        self.hcan = HCAN(pred_len=LOOKAHEAD, channels=2, hidden_dim=64)
         return
 
     def forward(self, x: Tensor) -> Tensor:
@@ -79,14 +84,19 @@ class NoHCAN(nn.Module):
 
 
 def train_model(model, model_name: str):
+    torch.manual_seed(42)
     data = MyData('train')
-    dataloader = torch.utils.data.DataLoader(data, batch_size=BATCH_SIZE)
+    dataloader = DataLoader(data, batch_size=BATCH_SIZE)
     model = model.to(dtype=DTYPE, device=DEVICE)
     model.train()
     if model_name == 'NoHCAN':
         criterion = nn.MSELoss().to(device=DEVICE)
     else:
-        criterion = HCANLoss(y_trues=data.y_trues).to(device=DEVICE)
+        criterion = HCANLoss(
+            y_trues=data.y_trues,
+            lambda_acl=1.5,
+            # reg_loss='mse',
+        ).to(device=DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     bar = trange(200, desc='Training ' + model_name, ncols=100)
     for epoch in bar:
@@ -95,16 +105,14 @@ def train_model(model, model_name: str):
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, targets)
-            if model_name == 'WithHCAN':
-                loss = loss['L_TOTAL']
             loss.backward()
             optimizer.step()
             epoch_loss += float(loss.detach().cpu())
-        bar.set_postfix({'loss': epoch_loss / BATCH_SIZE})
+        bar.set_postfix(loss=epoch_loss / BATCH_SIZE)
 
     # evaluation
     model.eval()
-    dataloader = torch.utils.data.DataLoader(MyData('test'), batch_size=BATCH_SIZE)
+    dataloader = DataLoader(MyData('test'), batch_size=BATCH_SIZE)
     all_y, all_x = [], []
     with torch.no_grad():
         for inputs, targets in dataloader:
@@ -119,10 +127,9 @@ def train_model(model, model_name: str):
     print(model_name + ' sign accuracy:', np.mean(np.sign(y[..., 0]) == np.sign(x[..., 0])))
     print(model_name + ' returns MSE:', np.mean((y[..., 0] - x[..., 0]) ** 2))
     print(model_name + ' volatility MSE:', np.mean((y[..., 1] - x[..., 1]) ** 2))
-
     return
 
 
 if __name__ == '__main__':
-    train_model(NoHCAN(), 'NoHCAN')
     train_model(WithHCAN(), 'WithHCAN')
+    train_model(NoHCAN(), 'NoHCAN')
