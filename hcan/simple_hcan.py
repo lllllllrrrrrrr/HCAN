@@ -90,8 +90,10 @@ class SimpleHCANLoss(nn.Module):
                  hcan: SimpleHCAN,
                  lambda_cls: float = 1.0,
                  cls_method: Literal['uniform', 'quantile'] = 'quantile',
+                 reduction: Literal['mean', 'sum', 'none'] = 'mean',
                  ) -> None:
         super().__init__()
+        self.reduction = reduction
         self.lambda_cls = lambda_cls
         self.toks = {
             phase: GroupTokenizer(
@@ -117,4 +119,8 @@ class SimpleHCANLoss(nn.Module):
 
         loss_direct = F.mse_loss(x["y_hat"], y, reduction='none')
         total_loss = loss_direct + self.lambda_cls * aux_loss
-        return total_loss.mean()
+        if self.reduction == 'mean':
+            return total_loss.mean()
+        elif self.reduction == 'sum':
+            return total_loss.sum()
+        return total_loss
