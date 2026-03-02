@@ -1,3 +1,5 @@
+from typing import Literal
+
 import torch
 from .hcan import HCANClassifier, GroupTokenizer
 import torch.nn as nn
@@ -47,7 +49,7 @@ class SimpleHCAN(nn.Module):
         h_proj = F.relu(self.h_proj(h_combined))  # (B, C, H)
 
         # Add input features (as a residual connection) to the combined classifier features
-        combined_features = h_proj + self.x_projector(x_ct) # (B, C, H)
+        combined_features = h_proj + self.x_projector(x_ct)  # (B, C, H)
 
         # Regression prediction from combined features
         y_hat = self.predictor(combined_features).permute(0, 2, 1).contiguous()  # (B,T,C)
@@ -60,31 +62,31 @@ class SimpleHCAN(nn.Module):
 
 class SimpleHCANLoss(nn.Module):
     def __init__(self, *,
-                 y_trues: Tensor, # (N, C) tensor of true values for each class, used for tokenization
+                 y_trues: Tensor,  # (N, C) tensor of true values for each class, used for tokenization
                  hcan: SimpleHCAN,
                  lambda_cls: float = 1.0,
                  ) -> None:
         super().__init__()
         self.lambda_cls = lambda_cls
-        self.coarse_tok = GroupTokenizer(num_classes=hcan.coarse_classifier.num_classes, y_trues=y_trues)
-        self.fine_tok = GroupTokenizer(num_classes=hcan.fine_classifier.num_classes, y_trues=y_trues)
+        self.toks = {
+            'coarse': GroupTokenizer(num_classes=hcan.coarse_classifier.num_classes, y_trues=y_trues),
+            'fine': GroupTokenizer(num_classes=hcan.fine_classifier.num_classes, y_trues=y_trues),
+        }
         return
+
+    def _aux_loss(self, phase: Literal['coarse', 'fine'], x: dict[str, Tensor], y: Tensor) -> Tensor:
+        return F.cross_entropy(
+            x[f'{phase}_logit'].permute(0, 3, 1, 2),  # (B,T,C,Kc)
+            self.toks[phase].tokenize(y)[0],  # (B,T,C)
+            reduction='none',
+        )
 
     def forward(self, x: dict[str, Tensor], y: Tensor) -> Tensor:
         if y.ndim == 2:
             y = y.unsqueeze(-1)
 
-        # Tokenize ground truth into class labels
-        label_c, _ = self.coarse_tok.tokenize(y)  # (B,T,C)
-        label_f, _ = self.fine_tok.tokenize(y)  # (B,T,C)
-
-        coarse_logit = x['coarse_logit']  # (B,T,C,Kc)
-        fine_logit = x['fine_logit']  # (B,T,C,Kf)
-
-        # Auxiliary classification losses
-        loss_cls_c = F.cross_entropy(coarse_logit.permute(0, 3, 1, 2), label_c, reduction='none')
-        loss_cls_f = F.cross_entropy(fine_logit.permute(0, 3, 1, 2), label_f, reduction='none')
+        aux_loss = sum(self._aux_loss(k, x, y) for k in ['coarse', 'fine'])
 
         loss_direct = F.mse_loss(x["y_hat"], y, reduction='none')
-        total_loss = loss_direct + self.lambda_cls * (loss_cls_c + loss_cls_f)
+        total_loss = loss_direct + self.lambda_cls * aux_loss
         return total_loss.mean()
