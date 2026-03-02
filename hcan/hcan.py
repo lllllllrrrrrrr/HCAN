@@ -55,48 +55,70 @@ def un_ce_loss_from_logits(labels: Tensor,
 
 
 class GroupTokenizer(nn.Module):
-    def __init__(self, num_groups: int, y_trues: Tensor, eps: float = 1e-12):
+    def __init__(self,
+                 num_classes: int,
+                 y_trues: Tensor,
+                 method: Literal['quantile', 'uniform'] = 'uniform',
+                 eps: float = 1e-12,
+                 ):
         super().__init__()
-        self.num_groups = num_groups
+        self.num_classes = num_classes
         self.eps = eps
         self.register_buffer("left_edges", torch.empty(0))  # C, K
         self.register_buffer("right_edges", torch.empty(0))  # C, K
-        self._fit(y_trues)
+        self._fit(y_trues, method)
         return
 
     @torch.no_grad()
-    def _fit(self, y_trues: Tensor) -> None:
+    def _fit(self, y_trues: Tensor, method: Literal['quantile', 'uniform']) -> None:
         if y_trues.ndim == 1:
             y_trues = y_trues.unsqueeze(-1)
 
         C = y_trues.size(-1)
-        flat = y_trues.reshape(-1, C).float()  # (N*,C)
-        K = self.num_groups
+        l = torch.empty((C, self.num_classes), device=y_trues.device, dtype=y_trues.dtype)
+        r = torch.empty((C, self.num_classes), device=y_trues.device, dtype=y_trues.dtype)
+        if method == 'quantile':
+            l, r = self._fit_quantile(y_trues, l, r)
+        elif method == 'uniform':
+            l, r = self._fit_uniform(y_trues, l, r)
+        else:
+            raise ValueError(f"Unknown method {method}")
+        self.left_edges = l
+        self.right_edges = r
+        return
 
-        left_edges = torch.empty((C, K), device=flat.device, dtype=flat.dtype)
-        right_edges = torch.empty((C, K), device=flat.device, dtype=flat.dtype)
-
+    @torch.no_grad()
+    def _fit_quantile(self, flat: Tensor, l: Tensor, r: Tensor) -> tuple[Tensor, Tensor]:
         L = flat.size(0)
-        idx = torch.arange(0, K + 1, device=flat.device, dtype=flat.dtype)
-        idx = torch.floor(idx * (L - 1) / K).long().clamp(max=L - 1).long()
+        idx = torch.arange(0, self.num_classes + 1, device=flat.device, dtype=flat.dtype)
+        idx = torch.floor(idx * (L - 1) / self.num_classes).long().clamp(max=L - 1).long()
 
-        for c in range(C):
+        for c in range(flat.size(-1)):
             vals, _ = torch.sort(flat[:, c])
             mn, mx = vals[0], vals[-1]
-            for i in range(K):
-                left_edges[c, i] = mn if i == 0 else vals[idx[i]]
-                right_edges[c, i] = mx if i == K - 1 else vals[idx[i + 1]]
+            for i in range(self.num_classes):
+                l[c, i] = mn if i == 0 else vals[idx[i]]
+                r[c, i] = mx if i == self.num_classes - 1 else vals[idx[i + 1]]
+        return l, r
 
-        self.left_edges = left_edges
-        self.right_edges = right_edges
-        return
+    @torch.no_grad()
+    def _fit_uniform(self, flat: Tensor, l: Tensor, r: Tensor) -> tuple[Tensor, Tensor]:
+        for c in range(flat.size(-1)):
+            mn, mx = flat[:, c].min(), flat[:, c].max()
+
+            # Create K bins of equal width from min to max
+            edges = torch.linspace(mn, mx, self.num_classes + 1, device=flat.device)
+            l[c, :] = edges[:-1]
+            r[c, :] = edges[1:]
+            r[c, -1] = mx # Ensure the last bin includes the max value
+        return l, r
 
     def tokenize(self, y: Tensor) -> tuple[Tensor, Tensor]:
         if y.ndim == 2:
             y = y.unsqueeze(-1)
 
         B, T, C = y.size()
-        K = self.num_groups
+        K = self.num_classes
 
         left = self.left_edges.to(device=y.device, dtype=y.dtype)
         right = self.right_edges.to(device=y.device, dtype=y.dtype)
@@ -244,8 +266,8 @@ class HCANLoss(nn.Module):
             self.reg_loss = nn.SmoothL1Loss()
 
         self.register_buffer("_global_step", torch.zeros((), dtype=torch.long))
-        self.coarse_tok = GroupTokenizer(num_groups=num_coarse, y_trues=y_trues)
-        self.fine_tok = GroupTokenizer(num_groups=num_fine, y_trues=y_trues)
+        self.coarse_tok = GroupTokenizer(num_classes=num_coarse, y_trues=y_trues)
+        self.fine_tok = GroupTokenizer(num_classes=num_fine, y_trues=y_trues)
         return
 
     def _reg(self, pred: Tensor, target: Tensor, mask: Tensor) -> Tensor:
