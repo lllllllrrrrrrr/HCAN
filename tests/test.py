@@ -1,5 +1,7 @@
 import numpy as np
-from hcan import HCAN, HCANLoss
+# from hcan import HCAN, HCANLoss
+from hcan import SimpleHCAN as HCAN, SimpleHCANLoss as HCANLoss
+
 import torch
 import torch.nn as nn
 import pandas as pd
@@ -13,10 +15,10 @@ if torch.cuda.is_available():
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 WINDOW_SIZE = 256
-LOOKAHEAD = 21
+LOOKAHEAD = 24
 DTYPE = torch.float32
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-BATCH_SIZE = 500
+BATCH_SIZE = 6000
 
 
 class MyData(Dataset):
@@ -26,10 +28,10 @@ class MyData(Dataset):
         df['ret'] = df.close.pct_change().fillna(0)
         df['vola'] = df['ret'].rolling(10).std()
         df = df.drop(columns=['close']).dropna()
-        self.y_trues = torch.tensor(df.values, dtype=DTYPE, device=DEVICE)
         l = len(df) - WINDOW_SIZE - LOOKAHEAD
         if split == 'train':
             df = df.iloc[:int(l * .8)]
+            self.y_trues = torch.tensor(df.values, dtype=DTYPE, device=DEVICE)
         else:
             df = df.iloc[int(l * .8):]
         self._df = df
@@ -50,30 +52,32 @@ class MyData(Dataset):
 class WithHCAN(nn.Module):
     def __init__(self):
         super().__init__()
-        self.lstm = nn.LSTM(input_size=2, hidden_size=64, num_layers=3, batch_first=True)
-        self.proj = nn.Sequential(
-            nn.Linear(64, 64),
-            nn.ReLU(),
-            nn.Linear(64, 2),
+        self.base = NoHCAN(hidden_size=64)
+        self.hcan = HCAN(
+            pred_len=LOOKAHEAD,
+            channels=2,
+            hidden_dim=1024,
+            # num_coarse=4,
+            # num_fine=8,
+            cross_channel_attention=True,
+            num_heads=8,
         )
-        self.hcan = HCAN(pred_len=LOOKAHEAD, channels=2, hidden_dim=64)
         return
 
     def forward(self, x: Tensor) -> Tensor:
-        x, _ = self.lstm(x)
-        x = self.proj(x[:, -LOOKAHEAD:, :])
+        x = self.base(x)
         x = self.hcan(x)
         return x
 
 
 class NoHCAN(nn.Module):
-    def __init__(self):
+    def __init__(self, hidden_size: int = 64):
         super().__init__()
-        self.lstm = nn.LSTM(input_size=2, hidden_size=64, num_layers=3, batch_first=True)
+        self.lstm = nn.LSTM(input_size=2, hidden_size=hidden_size, num_layers=3, batch_first=True)
         self.proj = nn.Sequential(
-            nn.Linear(64, 64),
+            nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(64, 2),
+            nn.Linear(hidden_size, 2),
         )
         return
 
@@ -94,13 +98,10 @@ def train_model(model, model_name: str):
     else:
         criterion = HCANLoss(
             y_trues=data.y_trues,
-            lambda_direct=1,
-            lambda_acl=1,
-            lambda_cls=1,
-            lambda_reg=1,
+            hcan=model.hcan,
         ).to(device=DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    bar = trange(200, desc='Training ' + model_name, ncols=100)
+    bar = trange(100, desc='Training ' + model_name, ncols=100)
     for epoch in bar:
         epoch_loss = 0.0
         for inputs, targets in dataloader:
