@@ -58,7 +58,7 @@ class GroupTokenizer(nn.Module):
     def __init__(self,
                  num_classes: int,
                  y_trues: Tensor,
-                 method: Literal['quantile', 'uniform'] = 'uniform',
+                 method: Literal['quantile', 'uniform'] = 'quantile',
                  eps: float = 1e-12,
                  ):
         super().__init__()
@@ -241,8 +241,7 @@ class HCANLoss(nn.Module):
 
     def __init__(self, *,
                  y_trues: Tensor,
-                 num_coarse: int = 2,
-                 num_fine: int = 4,
+                 hcan: HCAN,
                  lambda_cls: float = 1.0,
                  lambda_reg: float = 1.0,
                  lambda_acl: float = 1.0,
@@ -251,9 +250,8 @@ class HCANLoss(nn.Module):
                  reg_loss: Literal['mse', 'smooth_l1'] = 'smooth_l1',
                  ) -> None:
         super().__init__()
-        assert num_fine % num_coarse == 0, "num_fine must be multiple of num_coarse"
-        self.num_coarse = num_coarse
-        self.num_fine = num_fine
+        self.num_coarse = hcan.coarse.num_classes
+        self.num_fine = hcan.fine.num_classes
         self.annealing_step = annealing_step
         self.lambda_direct = lambda_direct
         self.lambda_acl = lambda_acl
@@ -266,8 +264,8 @@ class HCANLoss(nn.Module):
             self.reg_loss = nn.SmoothL1Loss()
 
         self.register_buffer("_global_step", torch.zeros((), dtype=torch.long))
-        self.coarse_tok = GroupTokenizer(num_classes=num_coarse, y_trues=y_trues)
-        self.fine_tok = GroupTokenizer(num_classes=num_fine, y_trues=y_trues)
+        self.coarse_tok = GroupTokenizer(num_classes=self.num_coarse, y_trues=y_trues)
+        self.fine_tok = GroupTokenizer(num_classes=self.num_fine, y_trues=y_trues)
         return
 
     def _reg(self, pred: Tensor, target: Tensor, mask: Tensor) -> Tensor:
