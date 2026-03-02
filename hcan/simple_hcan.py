@@ -60,18 +60,14 @@ class SimpleHCAN(nn.Module):
 
 class SimpleHCANLoss(nn.Module):
     def __init__(self, *,
-                 y_trues: Tensor,
-                 num_coarse: int = 2,
-                 num_fine: int = 4,
+                 y_trues: Tensor, # (N, C) tensor of true values for each class, used for tokenization
+                 hcan: SimpleHCAN,
                  lambda_cls: float = 1.0,
                  ) -> None:
         super().__init__()
-        self.num_coarse = num_coarse
-        self.num_fine = num_fine
         self.lambda_cls = lambda_cls
-
-        self.coarse_tok = GroupTokenizer(num_groups=num_coarse, y_trues=y_trues)
-        self.fine_tok = GroupTokenizer(num_groups=num_fine, y_trues=y_trues)
+        self.coarse_tok = GroupTokenizer(num_classes=hcan.coarse_classifier.num_classes, y_trues=y_trues)
+        self.fine_tok = GroupTokenizer(num_classes=hcan.fine_classifier.num_classes, y_trues=y_trues)
         return
 
     def forward(self, x: dict[str, Tensor], y: Tensor) -> Tensor:
@@ -82,16 +78,13 @@ class SimpleHCANLoss(nn.Module):
         label_c, _ = self.coarse_tok.tokenize(y)  # (B,T,C)
         label_f, _ = self.fine_tok.tokenize(y)  # (B,T,C)
 
-        y_hat = x["y_hat"]  # (B,T,C)
         coarse_logit = x['coarse_logit']  # (B,T,C,Kc)
         fine_logit = x['fine_logit']  # (B,T,C,Kf)
-
-        # Main regression loss
-        loss_direct = F.mse_loss(y_hat, y, reduction='none')
 
         # Auxiliary classification losses
         loss_cls_c = F.cross_entropy(coarse_logit.permute(0, 3, 1, 2), label_c, reduction='none')
         loss_cls_f = F.cross_entropy(fine_logit.permute(0, 3, 1, 2), label_f, reduction='none')
 
+        loss_direct = F.mse_loss(x["y_hat"], y, reduction='none')
         total_loss = loss_direct + self.lambda_cls * (loss_cls_c + loss_cls_f)
         return total_loss.mean()
